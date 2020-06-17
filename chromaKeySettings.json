@@ -1,0 +1,11 @@
+{
+  "variance_amp" : 0.0075,
+  "threshold_variance_delta" : 0.08,
+  "threshold_refine_background" : 50,
+  "threshold_foreground_absolute" : 10,
+  "threshold_foreground_reflective" : 200,
+  "saturation_lightness_function" : {
+    "x_pivots" : [25,77,102,128,179,205,230,255],
+    "y_pivots" : [255,102,76,76,51,51,13,13]
+  }
+}
