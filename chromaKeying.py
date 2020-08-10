@@ -4,6 +4,7 @@ import matplotlib.pyplot as plt
 import json
 from sketcher import Sketcher
 
+from mpl_toolkits.mplot3d import Axes3D
 """@brief A chroma keying class. This chroma keying method is based on global color statistic and has the following
           assumption on the background:
             1. Textureless
@@ -299,3 +300,24 @@ class ChromaKeyer:
 
   def apply_mask(self, image, mask):
     return cv2.bitwise_and(image,image,mask=mask)
+
+  def build_GMM_color_model(self):
+    ret, frame = self.video.read()
+    
+    frame_hsv = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
+    frame_hsv = frame_hsv.astype(np.float32)
+    frame_hsv /= 255.0
+
+    lightness_groups = self.lightness_grouping(frame_hsv)
+    for x in lightness_groups:
+      hist = cv2.calcHist([frame_hsv], [0,1], x, [256,256], [0.0, 1.0, 0.0, 1.0])
+
+  def lightness_grouping(self, frame):
+    lightness_masks = []
+    step = 0.1
+    lower_lim = 0.0
+    upper_lim = 1.0
+    for i,j in zip(np.arange(lower_lim, upper_lim, step), np.arange(lower_lim+step, upper_lim+step, step)):
+      mask = cv2.inRange(frame[:,:,2], i, j)
+      lightness_masks.append(mask)
+    return lightness_masks
