@@ -5,17 +5,89 @@ import json
 from sketcher import Sketcher
 
 from mpl_toolkits.mplot3d import Axes3D
-"""@brief A chroma keying class. This chroma keying method is based on global color statistic and has the following
-          assumption on the background:
-            1. Textureless
-            2. A uniform color
-            3. Is the most prominent color
-            4. Foreground does not contain background color
-          
-          The implementation follows this research paper:
-          https://pdfs.semanticscholar.org/bf62/cae2be4b4785f4a54ba9d9ef54e0ba61068c.pdf
-"""
+  
 class ChromaKeyer:
+  """
+  A chroma keying class. This chroma keying method is implemented based on global color statistic. The following
+  assumptions of the background is critical for this method to work:
+    1. Textureless
+    2. A uniform color
+    3. Is the most prominent color
+    4. Foreground does not contain background color
+
+  For reference, visit this paper:
+  https://pdfs.semanticscholar.org/bf62/cae2be4b4785f4a54ba9d9ef54e0ba61068c.pdf
+
+  Attributes
+  ----------
+  video: cv2.VideoCapture()
+    The video stream that contains the foreground and background region
+  auto_background_detection_enable: bool
+    The flag which indicates whether to use auto/manual background extraction
+  background_hue_range: tuple
+    The (lower,upper) hue range of background color
+  variance_amp: float
+    The ampilifying factor of variance calculated in histogram analysis method
+  threshold_variance_delta: float 
+    The threshold for magnitude of change in variance calculated in histogram analysis method
+  threshold_refine_background: int
+    The upper range threshold used for refining the detected background region
+  threshold_foreground_absolute: int
+    The threshold for which a pixel is considered absolute foreground
+  threshold_foreground_reflective: int
+    The threshold for which a pixel is considered reflective foreground
+  saturation_lightness_function: np.ndarray
+    The mapping of lightness (V-channel) to saturation (S-channel)
+
+  Methods
+  -------
+  update_settings(config_file)
+    Update the attributes with the settings from the configuration file
+  
+  key()
+    Main method, stream and extract background from video source
+  
+  alpha_channel_estimation() - TODO
+    Estimate value of the alpha channel - determine which pixel should be transparent (background), which pixel should
+    be opague (foreground)
+
+  manual_background_detection()
+    Use interactive user interface to extract background
+  
+  auto_background_detection(frame)
+    Automatically detect background region in a frame
+
+  get_background_mask_in_range(frame)
+    Acquire the background mask based on the hue range
+
+  detect_foreground(frame)
+    Detect different region of the foreground
+
+  detect_foreground_absolute(frame)
+    Detect absolute foreground region
+
+  detect_foreground_reflective(frame)
+    Detect reflection foreground region - i.e. foreground regions that reflect the color of background
+
+  color_spill_suppression(frame)
+    Suppression color spill from background to foreground
+
+  histogram_analysis(frame, channel, mask)
+    Run histogram analysis on input to extract the predominant colors
+
+  get_hue_range(histogram)
+    Extract the continuous color range that corresponds to the most dominant color from the histogram
+
+  apply_mask(image, mask)
+    Helper function to apply mask onto image
+
+  build_GMM_color_model()
+    Build a Gaussian Mixture Model that represents the colors of the image with a few dominant colors
+
+  lightness_grouping(frame)
+    Group pixels of the frame into different channels, which correspond to a range of lightness value
+  """
+
   def __init__(self, video, auto_back_det_enable, settings_path):
     self.video = video
     self.auto_background_detection_enable = auto_back_det_enable
@@ -134,16 +206,6 @@ class ChromaKeyer:
           cv2.imshow(foreground_window_name, self.apply_mask(frame, frame_background_mask))
 
     cv2.destroyAllWindows()
-  
-  def get_background_mask_in_range(self, frame):
-    """@brief Obtain background mask based on pre-determined hue range
-
-       @return Background mask
-    """
-    frame_background_mask = cv2.inRange(frame[:,:,0],
-                                        self.background_hue_range[0],
-                                        self.background_hue_range[1])
-    return self.refine_background(frame,cv2.bitwise_not(frame_background_mask))
 
   def auto_background_detection(self, frame):
     """@brief Automatically detect background of an image based on
@@ -180,21 +242,6 @@ class ChromaKeyer:
 
     return result
 
-  def detect_foreground(self, foreground):
-    """@brief Detect different foreground region of the image
-
-       @param foreground Foreground subtracted from background
-       @return The mask for absolute foreground region,
-               The mask for reflective foreground region AND
-               The foreground with green intensity suppressed in BGR
-    """
-    absolute_foreground_mask = self.detect_foreground_absolute(foreground)
-    reflective_foreground_mask = self.detect_foreground_reflective(foreground)
-
-    green_suppressed_foreground_bgr = self.color_spill_suppression(cv2.cvtColor(foreground, cv2.COLOR_HSV2BGR))
-
-    return (absolute_foreground_mask,reflective_foreground_mask,green_suppressed_foreground_bgr)
-
   def refine_background(self, frame, mask):
     """@brief Refine the background mask, for dealing with transparent regions
 
@@ -209,6 +256,31 @@ class ChromaKeyer:
     mask_refined = cv2.bitwise_and(mask, fine_background_mask)
 
     return mask_refined
+
+  def get_background_mask_in_range(self, frame):
+    """@brief Obtain background mask based on pre-determined hue range
+
+       @return Background mask
+    """
+    frame_background_mask = cv2.inRange(frame[:,:,0],
+                                        self.background_hue_range[0],
+                                        self.background_hue_range[1])
+    return self.refine_background(frame,cv2.bitwise_not(frame_background_mask))
+
+  def detect_foreground(self, frame):
+    """@brief Detect different foreground region of the image
+
+       @param foreground Foreground subtracted from background
+       @return The mask for absolute foreground region,
+               The mask for reflective foreground region AND
+               The foreground with green intensity suppressed in BGR
+    """
+    absolute_foreground_mask = self.detect_foreground_absolute(frame)
+    reflective_foreground_mask = self.detect_foreground_reflective(frame)
+
+    green_suppressed_foreground_bgr = self.color_spill_suppression(cv2.cvtColor(frame, cv2.COLOR_HSV2BGR))
+
+    return (absolute_foreground_mask,reflective_foreground_mask,green_suppressed_foreground_bgr)
 
   def detect_foreground_absolute(self, frame):
     """@brief Identify absolute background that is far enough 
@@ -233,14 +305,14 @@ class ChromaKeyer:
 
     return foreground_mask
 
-  def detect_foreground_reflective(self, foreground):
+  def detect_foreground_reflective(self, frame):
     """@brief Detect colorless region based on saturation threshold
      
        @param foreground The foreground portion of the photo in BGR
        @return The mask of reflective foreground region
     """
-    saturation_threshold_matrix = cv2.LUT(foreground[:,:,2],self.saturation_lightness_function)
-    gray_confidence = saturation_threshold_matrix - foreground[:,:,1]
+    saturation_threshold_matrix = cv2.LUT(frame[:,:,2],self.saturation_lightness_function)
+    gray_confidence = saturation_threshold_matrix - frame[:,:,1]
 
     reflective_foreground_mask = cv2.inRange(gray_confidence,self.threshold_foreground_reflective,255)
 
@@ -258,7 +330,7 @@ class ChromaKeyer:
 
     return cv2.merge((b,g,r))
 
-  def histogram_analysis(self,frame,channel,mask):
+  def histogram_analysis(self,frame, channel, mask):
     """@brief Extract dominant pixels in a channel of a frame
 
        @param frame The video frame in HSV being used for histogram analysis
@@ -311,6 +383,8 @@ class ChromaKeyer:
     lightness_groups = self.lightness_grouping(frame_hsv)
     for x in lightness_groups:
       hist = cv2.calcHist([frame_hsv], [0,1], x, [256,256], [0.0, 1.0, 0.0, 1.0])
+      cv2.imshow("hist", hist)
+      cv2.waitKey(0)
 
   def lightness_grouping(self, frame):
     lightness_masks = []
