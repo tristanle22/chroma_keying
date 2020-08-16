@@ -101,7 +101,8 @@ class ChromaKeyer:
     self.threshold_foreground_reflective = 0
     self.saturation_lightness_function = None
 
-    self.update_settings(settings_path)
+    if settings_path:
+      self.update_settings(settings_path)
 
   def update_settings(self, settings_path):
     """@brief Update settings of ChromaKeyer object from a json file.
@@ -109,6 +110,9 @@ class ChromaKeyer:
 
       @param settings_path Path to the settings json file
     """
+    if not settings_path:
+      return False
+
     with open(settings_path,'r') as f:
       settings = json.load(f)
       
@@ -121,6 +125,8 @@ class ChromaKeyer:
                                                      settings['saturation_lightness_function']['x_pivots'],
                                                      settings['saturation_lightness_function']['y_pivots'])
 
+    return True
+    
   def key(self):
     """@brief Perform chroma keying on the video footage.
     """
@@ -219,6 +225,9 @@ class ChromaKeyer:
         @return result The background mask that blocks out background and
                        keep foreground
     """
+    if len(frame.shape) < 3 or frame.shape[2] < 3:
+      return False
+
     h_channel,s_channel,v_channel = cv2.split(frame)
   
     # Hue channel
@@ -238,9 +247,7 @@ class ChromaKeyer:
 
     # Refine background using gradient threshold
     background_mask = cv2.bitwise_not(mask_h*mask_s*mask_v)
-    result = self.refine_background(frame, background_mask)
-
-    return result
+    return self.refine_background(frame, background_mask)
 
   def refine_background(self, frame, mask):
     """@brief Refine the background mask, for dealing with transparent regions
@@ -249,6 +256,9 @@ class ChromaKeyer:
        @param mask The background mask to be modified
        @return The refined background mask
     """
+    if len(frame.shape) < 3 or frame.shape[2] < 3:
+      return False
+
     gradient = cv2.Sobel(frame[:,:,2],cv2.CV_32F,1,1)
     gradient = np.abs(gradient)
 
@@ -262,6 +272,9 @@ class ChromaKeyer:
 
        @return Background mask
     """
+    if len(frame.shape) < 3 or frame.shape[2] < 3:
+      return False
+
     frame_background_mask = cv2.inRange(frame[:,:,0],
                                         self.background_hue_range[0],
                                         self.background_hue_range[1])
@@ -275,6 +288,9 @@ class ChromaKeyer:
                The mask for reflective foreground region AND
                The foreground with green intensity suppressed in BGR
     """
+    if len(frame.shape) < 3 or frame.shape[2] < 3:
+      return False
+
     absolute_foreground_mask = self.detect_foreground_absolute(frame)
     reflective_foreground_mask = self.detect_foreground_reflective(frame)
 
@@ -289,6 +305,9 @@ class ChromaKeyer:
        @param frame The video frame being used
        @return The foreground mask of absolute foreground region
     """
+    if len(frame.shape) < 3 or frame.shape[2] < 3:
+      return False
+
     h_min, h_max = self.background_hue_range
     foreground_hue = []
     
@@ -311,6 +330,9 @@ class ChromaKeyer:
        @param foreground The foreground portion of the photo in BGR
        @return The mask of reflective foreground region
     """
+    if len(frame.shape) < 3 or frame.shape[2] < 3:
+      return False
+
     saturation_threshold_matrix = cv2.LUT(frame[:,:,2],self.saturation_lightness_function)
     gray_confidence = saturation_threshold_matrix - frame[:,:,1]
 
@@ -324,13 +346,17 @@ class ChromaKeyer:
        @param frame The colorless portion of the photo in BGR
        @return The frame with green spilling suppressed in BGR
     """
+    if len(frame.shape) < 3 or frame.shape[2] < 3:
+      print("Invalid input")
+      return np.zeros_like(frame)
+
     b,g,r = cv2.split(frame)
     max_br = np.maximum(b,r)
     g[g > max_br] = max_br[g > max_br]
 
     return cv2.merge((b,g,r))
 
-  def histogram_analysis(self,frame, channel, mask):
+  def histogram_analysis(self, frame, channel, mask):
     """@brief Extract dominant pixels in a channel of a frame
 
        @param frame The video frame in HSV being used for histogram analysis
@@ -338,6 +364,9 @@ class ChromaKeyer:
        @param mask The mask to extract region of interest (ROI) from the frame
        @return An numpy array that contains only the most dominant bins
     """
+    if len(frame.shape) < 3 or frame.shape[2] < 3 or frame.shape[:2] != mask.shape or channel not in range(3):
+      return (0,0)
+
     hist = cv2.calcHist([frame], [channel], mask, [256], [0,256])
     background_hue = np.zeros_like(hist,dtype='float')
 
@@ -353,8 +382,8 @@ class ChromaKeyer:
       if var_k == 0 or var_k < self.variance_amp * var_0 and abs(var_k-var_prev)/var_prev < self.threshold_variance_delta:
         break
       var_prev = var_k
-    results = self.get_hue_range(background_hue)
-    return results
+    
+    return self.get_hue_range(background_hue)
 
   def get_hue_range(self, histogram):
     """@brief Extract the group consecutive bins which contains the tallest bin
@@ -368,9 +397,14 @@ class ChromaKeyer:
         i -= 1
       if j < histogram.shape[0]-1 and histogram[j] > 0:
         j += 1
+
     return (i.item(),j.item())
 
   def apply_mask(self, image, mask):
+    if image.shape[:2] != mask.shape
+      print("Invalid input, image shape != mask shape")
+      return False
+
     return cv2.bitwise_and(image,image,mask=mask)
 
   def build_GMM_color_model(self):
@@ -387,6 +421,9 @@ class ChromaKeyer:
       cv2.waitKey(0)
 
   def lightness_grouping(self, frame):
+    if len(frame.shape) < 3 or frame.shape[2] < 3:
+      return []
+
     lightness_masks = []
     step = 0.1
     lower_lim = 0.0
