@@ -5,7 +5,7 @@ import numpy as np
 import argparse
 
 def main():
-  filename = './data/greenscreen-demo.mp4'
+  filename = './data/chuong.jpg'
   filename = os.path.abspath(os.path.join(os.path.dirname(__file__),filename))
 
   cap = cv2.VideoCapture(filename)

@@ -1,8 +1,12 @@
 import cv2
+import os
 import numpy as np
 import matplotlib.pyplot as plt 
 import json
 from sketcher import Sketcher
+from skimage.feature import peak_local_max
+from skimage.segmentation import watershed
+from scipy import ndimage
 
 from mpl_toolkits.mplot3d import Axes3D
   
@@ -401,7 +405,7 @@ class ChromaKeyer:
     return (i.item(),j.item())
 
   def apply_mask(self, image, mask):
-    if image.shape[:2] != mask.shape
+    if image.shape[:2] != mask.shape:
       print("Invalid input, image shape != mask shape")
       return False
 
@@ -415,10 +419,24 @@ class ChromaKeyer:
     frame_hsv /= 255.0
 
     lightness_groups = self.lightness_grouping(frame_hsv)
+    k_size = 5
     for x in lightness_groups:
-      hist = cv2.calcHist([frame_hsv], [0,1], x, [256,256], [0.0, 1.0, 0.0, 1.0])
-      cv2.imshow("hist", hist)
-      cv2.waitKey(0)
+      hist = cv2.calcHist([frame_hsv], [0,1], x, [256,256], [0.0, 1.0, 0.0, 1.0])    
+
+
+      hist_Median = cv2.medianBlur(hist, 5)
+      hist_Gaussian = cv2.GaussianBlur(hist_Median, (k_size,k_size), 0)
+      hist_Penalized = self.smoothen_histogram_penalized_likelihood(hist_Median)
+
+      local_max, labels = self.extract_color_distribution(hist_Penalized,20)
+
+      # print("Penalized local max: \n{}".format(local_max))
+      peaks = self.apply_mask(hist_Penalized, local_max.astype(np.uint8))
+ 
+      output = np.concatenate([hist, hist_Gaussian, hist_Penalized, peaks], axis=1)
+      cv2.imshow("Original - Median blurred - Gaussian blurred - Penalized", output)
+      if cv2.waitKey(0) & 0xFF == 27:
+        break
 
   def lightness_grouping(self, frame):
     if len(frame.shape) < 3 or frame.shape[2] < 3:
@@ -432,3 +450,41 @@ class ChromaKeyer:
       mask = cv2.inRange(frame[:,:,2], i, j)
       lightness_masks.append(mask)
     return lightness_masks
+
+  def smoothen_histogram_penalized_likelihood(self, histogram, gamma=7):
+    n, d = histogram.shape
+    if n == 0 or d == 0 or n != d:
+      print("Histogram must be a non-empty, square matrix")
+      return np.array([])
+    
+    I = np.identity(n)
+    D1 = np.diff(I,axis=0)
+    D2 = np.diff(I, 2, axis=0)
+
+    P = gamma**2 * np.dot(D2.T, D2) + 2 * gamma * np.dot(D1.T, D1)
+    return np.linalg.solve((I + P), histogram)
+
+  def extract_color_distribution(self, hist, min_distance):
+    local_max = peak_local_max(hist, min_distance=min_distance, exclude_border=False, indices=False)
+    
+    markers, num_markers = ndimage.label(local_max, structure=np.ones((3,3)))
+    labels = watershed(-hist, markers)
+    print("[INFO] {} unique segments found".format(len(np.unique(labels)) - 1))
+    return (local_max, labels)
+
+
+def main():
+  filename = './data/toronto.jpg'
+  filename = os.path.abspath(os.path.join(os.path.dirname(__file__),filename))
+
+  cap = cv2.VideoCapture(filename)
+  settings_file = os.path.abspath(os.path.join(os.path.dirname(__file__),"chromaKeySettings.json"))
+  keyer = ChromaKeyer(cap, True, settings_file) # Change to 
+
+  # keyer.key()
+  keyer.build_GMM_color_model()
+  # keyer.test_2d_hist()
+  # keyer.smoothen_histogram_penalized_likelihood(None, 2)
+
+if __name__ == '__main__':
+  main()
