@@ -93,6 +93,17 @@ class ChromaKeyer:
   """
 
   def __init__(self, video, auto_back_det_enable, settings_path):
+    """
+    Parameters
+    ----------
+    video: cv2.VideoCapture
+      The video capture that contains foreground and monochromatic (usually green) background
+    auto_back_det_enable: bool
+      The flag that enables auto (True) or manual (False) background detection
+    settings_path: str
+      The path to the configuration file
+    """
+
     self.video = video
     self.auto_background_detection_enable = auto_back_det_enable
     
@@ -109,10 +120,12 @@ class ChromaKeyer:
       self.update_settings(settings_path)
 
   def update_settings(self, settings_path):
-    """@brief Update settings of ChromaKeyer object from a json file.
-              Helps to keep the settings tidy
+    """ Update settings of ChromaKeyer object from a json file. Helps to keep the settings tidy
 
-      @param settings_path Path to the settings json file
+    Parameters
+    ----------
+    settings_path: str
+      The path to the settings file
     """
     if not settings_path:
       return False
@@ -132,8 +145,9 @@ class ChromaKeyer:
     return True
     
   def key(self):
-    """@brief Perform chroma keying on the video footage.
+    """Perform chroma keying on the video footage.
     """
+
     if self.auto_background_detection_enable:
       while(self.video.isOpened()):
         ret, frame = self.video.read()
@@ -174,8 +188,8 @@ class ChromaKeyer:
     pass
 
   def manual_background_detection(self): #TODO: Implement status return AND user instruction
-    """@brief Detect bacground leveraging user input. Start by drawing scribbles onto the background in
-              the Color_select frame. Background hue range will be calculated by the pixels masked by the scribbles
+    """Detect bacground leveraging user input. Start by drawing scribbles onto the background in
+       the Color_select frame. Background hue range will be calculated by the pixels masked by the scribbles
     """
     def do_nothing(*args):
       pass
@@ -218,17 +232,23 @@ class ChromaKeyer:
     cv2.destroyAllWindows()
 
   def auto_background_detection(self, frame):
-    """@brief Automatically detect background of an image based on
-              global color statistic, assumming the background:
-              1. Textureless
-              2. A uniform color
-              3. Is the most prominent color
-              4. Foreground does not contain background color
+    """Automatically detect background of an image based on global color statistic, 
+       assumptions:
+        1. Background is textureless
+        2. Background is uniform in color
+        3. Background is the most prominent color
+        4. Foreground does not contain background color
 
-        @param frame The video frame that is used for background detection
-        @return result The background mask that blocks out background and
-                       keep foreground
+      Parameters
+      ----------
+      frame: np.ndarray
+
+      Returns
+      -------
+      bool ndarray
+        The mask for refined background
     """
+
     if len(frame.shape) < 3 or frame.shape[2] < 3:
       return False
 
@@ -254,11 +274,18 @@ class ChromaKeyer:
     return self.refine_background(frame, background_mask)
 
   def refine_background(self, frame, mask):
-    """@brief Refine the background mask, for dealing with transparent regions
+    """ Refine the background mask, for dealing with transparent regions
 
-       @param frame The video frame being refined. Used for calculating gradient
-       @param mask The background mask to be modified
-       @return The refined background mask
+    Parameters
+    ----------
+    frame: np.ndarray 
+      The video frame being refined. Used for calculating gradient
+    mask: bool np.ndarray 
+      The background mask that indicate which region to be modified
+    
+    Returns
+    -------
+      Refined background mask
     """
     if len(frame.shape) < 3 or frame.shape[2] < 3:
       return False
@@ -272,10 +299,19 @@ class ChromaKeyer:
     return mask_refined
 
   def get_background_mask_in_range(self, frame):
-    """@brief Obtain background mask based on pre-determined hue range
+    """Obtain background mask based on pre-determined hue range
 
-       @return Background mask
+    Parameters
+    ----------
+    frame: np.ndarray
+      The frame where background color range is extracted from
+    
+    Returns
+    -------
+    bool np.ndarray
+      The refined background mask
     """
+    
     if len(frame.shape) < 3 or frame.shape[2] < 3:
       return False
 
@@ -285,13 +321,23 @@ class ChromaKeyer:
     return self.refine_background(frame,cv2.bitwise_not(frame_background_mask))
 
   def detect_foreground(self, frame):
-    """@brief Detect different foreground region of the image
+    """Detect different foreground region of the image
 
-       @param foreground Foreground subtracted from background
-       @return The mask for absolute foreground region,
-               The mask for reflective foreground region AND
-               The foreground with green intensity suppressed in BGR
+    Parameters
+    ----------
+    frame: np.ndarray
+      The frame which contain the foreground object
+    
+    Returns
+    -------
+    bool np.ndarray
+      The mask for absolute foreground region
+    bool np.ndarray
+      The mask for reflective foreground region
+    np.ndarray
+      The foreground with green-intensity suppressed, in BGR format
     """
+
     if len(frame.shape) < 3 or frame.shape[2] < 3:
       return False
 
@@ -303,12 +349,20 @@ class ChromaKeyer:
     return (absolute_foreground_mask,reflective_foreground_mask,green_suppressed_foreground_bgr)
 
   def detect_foreground_absolute(self, frame):
-    """@brief Identify absolute background that is far enough 
-              from the background hue range
+    """Identify absolute background, that is the color region far enough 
+       from the background hue range
 
-       @param frame The video frame being used
-       @return The foreground mask of absolute foreground region
+    Parameters
+    ----------
+    frame: np.ndarray 
+      The video frame being used
+    
+    Returns
+    ------- 
+    bool np.ndarray
+      The foreground mask of absolute foreground region
     """
+
     if len(frame.shape) < 3 or frame.shape[2] < 3:
       return False
 
@@ -329,11 +383,18 @@ class ChromaKeyer:
     return foreground_mask
 
   def detect_foreground_reflective(self, frame):
-    """@brief Detect colorless region based on saturation threshold
-     
-       @param foreground The foreground portion of the photo in BGR
-       @return The mask of reflective foreground region
+    """Detect colorless region based on saturation threshold
+
+    Parameters
+    ----------
+    frame: np.ndarray 
+      The foreground portion of the photo in BGR
+
+    Returns
+    -------  
+      The mask of reflective foreground region
     """
+
     if len(frame.shape) < 3 or frame.shape[2] < 3:
       return False
 
@@ -345,11 +406,18 @@ class ChromaKeyer:
     return reflective_foreground_mask
 
   def color_spill_suppression(self, frame):
-    """@brief Suppress green color spilling in the colorless region
-     
-       @param frame The colorless portion of the photo in BGR
-       @return The frame with green spilling suppressed in BGR
+    """Suppress green color spilling in the foreground colorless region
+    
+    Parameters
+    ----------
+      frame: np.ndarray 
+        The colorless portion of the photo in BGR
+    Returns
+    -------
+    np.ndarray  
+      The frame in which green spilling has been suppressed, BGR format
     """
+
     if len(frame.shape) < 3 or frame.shape[2] < 3:
       print("Invalid input")
       return np.zeros_like(frame)
@@ -361,13 +429,23 @@ class ChromaKeyer:
     return cv2.merge((b,g,r))
 
   def histogram_analysis(self, frame, channel, mask):
-    """@brief Extract dominant pixels in a channel of a frame
+    """Extract dominant colors in a channel of a frame
 
-       @param frame The video frame in HSV being used for histogram analysis
-       @param channel The channel chosen for histogram analysis (H,S,V)
-       @param mask The mask to extract region of interest (ROI) from the frame
-       @return An numpy array that contains only the most dominant bins
+    Parameters
+    ----------
+    frame: np.ndarray 
+      The video frame in HSV being used for histogram analysis
+    channel: int 
+      The channel chosen for histogram analysis (0:H, 1:S, 2:V)
+    mask: bool ndarray 
+      The mask that identifies ROI to run histogram analysis on
+
+    Returns
+    -------
+    tuple
+      A tuple that contains the lower and upper bound of the dominant color range
     """
+
     if len(frame.shape) < 3 or frame.shape[2] < 3 or frame.shape[:2] != mask.shape or channel not in range(3):
       return (0,0)
 
@@ -389,12 +467,19 @@ class ChromaKeyer:
     
     return self.get_hue_range(background_hue)
 
-  def get_hue_range(self, histogram):
-    """@brief Extract the group consecutive bins which contains the tallest bin
+  def get_hue_range(self, histogram): # TODO Change naming of this function
+    """Extract the range of bins that contains the tallest bin
 
-       @param histogram The histogram that contains all the bins
-       @return A tuple of min and max bin indices
+    Parameters
+    ----------
+    histogram: np.ndarray 
+      The histogram that contains all the bins
+    Returns 
+    -------
+    tuple 
+      A tuple of min and max indices of the 
     """
+
     i = j = np.argmax(histogram)
     while (histogram[i] > 0 or histogram[j] > 0) and (i > 0 and j < histogram.shape[0]-1):
       if i > 0 and histogram[i] > 0:
@@ -405,6 +490,21 @@ class ChromaKeyer:
     return (i.item(),j.item())
 
   def apply_mask(self, image, mask):
+    """ Utility function used for applying mask on an image
+
+    Parameters
+    ----------
+    image: np.ndarray
+      The image
+    mask: bool np.ndarray
+      The mask
+
+    Returns
+    -------
+    np.ndarray
+      The image with mask applied, a.k.a Region of Interest (ROI)
+    """
+
     if image.shape[:2] != mask.shape:
       print("Invalid input, image shape != mask shape")
       return False
@@ -420,21 +520,22 @@ class ChromaKeyer:
 
     lightness_groups = self.lightness_grouping(frame_hsv)
     k_size = 5
-    for x in lightness_groups:
+    for i,x in enumerate(lightness_groups):
+      print(f"Lightness group: {i}")
       hist = cv2.calcHist([frame_hsv], [0,1], x, [256,256], [0.0, 1.0, 0.0, 1.0])    
 
+      hist_Median = cv2.medianBlur(hist, 5) # TODO: replace median blur with morph or thresholding?
+      smoothed_hist = self.smoothen_histogram(hist_Median)
 
-      hist_Median = cv2.medianBlur(hist, 5)
-      hist_Gaussian = cv2.GaussianBlur(hist_Median, (k_size,k_size), 0)
-      hist_Penalized = self.smoothen_histogram_penalized_likelihood(hist_Median)
-
-      local_max, labels = self.extract_color_distribution(hist_Penalized,20)
-
-      # print("Penalized local max: \n{}".format(local_max))
-      peaks = self.apply_mask(hist_Penalized, local_max.astype(np.uint8))
+      local_max, labels = self.extract_color_distribution(smoothed_hist, 30)
+      row, col = np.nonzero(local_max)
+      # print("Peak pixel index: {}".format((row,col)))
+      # print("Peak pixel values: {}".format(smoothed_hist[row, col]))
+      # print("-------------------------------")
+      peaks = self.apply_mask(smoothed_hist, local_max.astype(np.uint8))
  
-      output = np.concatenate([hist, hist_Gaussian, hist_Penalized, peaks], axis=1)
-      cv2.imshow("Original - Median blurred - Gaussian blurred - Penalized", output)
+      output = np.concatenate([hist, smoothed_hist, peaks], axis=1)
+      cv2.imshow("Original - Smoothed - Peaks", output)
       if cv2.waitKey(0) & 0xFF == 27:
         break
 
@@ -451,7 +552,7 @@ class ChromaKeyer:
       lightness_masks.append(mask)
     return lightness_masks
 
-  def smoothen_histogram_penalized_likelihood(self, histogram, gamma=7):
+  def smoothen_histogram(self, histogram, gamma=10):
     n, d = histogram.shape
     if n == 0 or d == 0 or n != d:
       print("Histogram must be a non-empty, square matrix")
@@ -464,14 +565,46 @@ class ChromaKeyer:
     P = gamma**2 * np.dot(D2.T, D2) + 2 * gamma * np.dot(D1.T, D1)
     return np.linalg.solve((I + P), histogram)
 
-  def extract_color_distribution(self, hist, min_distance):
-    local_max = peak_local_max(hist, min_distance=min_distance, exclude_border=False, indices=False)
-    
-    markers, num_markers = ndimage.label(local_max, structure=np.ones((3,3)))
-    labels = watershed(-hist, markers)
-    print("[INFO] {} unique segments found".format(len(np.unique(labels)) - 1))
-    return (local_max, labels)
+  def extract_color_distribution(self, hist, min_distance=20):
+    local_max_raw = peak_local_max(hist, min_distance=min_distance,
+                                     threshold_abs=2, 
+                                     exclude_border=5, 
+                                     indices=False)
 
+    peaks = self.NMS_peaks(self.apply_mask(hist, local_max_raw.astype(np.uint8)),min_distance)
+    local_max_refined = np.zeros_like(local_max_raw)
+    local_max_refined[peaks] = 1
+
+    markers, num_markers = ndimage.label(local_max_refined, structure=np.ones((3,3)))
+    labels = watershed(-hist, markers)
+
+    print("Number of peaks: {}".format(np.count_nonzero(local_max_refined)))
+    # print(np.unique(markers))
+    print("[INFO] {} unique segments found".format(len(np.unique(labels)) - 1))
+
+    return (local_max_refined, labels)
+  
+  def NMS_peaks(self, peaks, threshold):
+    if np.count_nonzero(peaks) == 0:
+      return ([],[])
+
+    row, col = np.nonzero(peaks)
+    new_x, new_y = [row[0]], [col[0]]
+
+    for c in zip(row, col):
+      unique = True
+      for x,y in zip(new_x, new_y):
+        if np.sqrt((c[0]-x)**2 + (c[1]-y)**2) <= threshold:
+          unique = False
+          if peaks[c] > peaks[x,y]:
+            x = c[0]
+            y = c[1]
+            break
+      if unique:
+        new_x.append(c[0])
+        new_y.append(c[1])
+
+    return (new_x,new_y)
 
 def main():
   filename = './data/toronto.jpg'

@@ -60,5 +60,41 @@ class TestChromaKeyingMethods(unittest.TestCase):
     lightness_masks = keyer.lightness_grouping(test_image_rand)
     self.assertEqual(pixel_count, np.sum(lightness_masks) / 255)
 
+  def test_smoothen_histogrmam(self):
+    test_image = cv2.imread("test_6.jpg")
+    test_image_hsv = cv2.cvtColor(test_image, cv2.COLOR_BGR2HSV)
+    test_image_hsv = test_image_hsv.astype(np.float32)
+    test_image_hsv /= 255.0
+
+    hist = cv2.calcHist([test_image_hsv], [0,1], None, [256,256], [0.0, 1.0, 0.0, 1.0])
+    keyer = ChromaKeyer(None, False, None)
+
+    test_vars = []
+    for x in range(5,10,2):
+      a = keyer.smoothen_histogram(hist, gamma=x)
+      var = self.var_abs_laplacian(a)
+      test_vars.append(var)
+
+    self.assertLess(test_vars[1][0], test_vars[0][0])
+    self.assertLess(test_vars[2][0], test_vars[1][0])
+    self.assertLess(test_vars[1][1], test_vars[0][1])
+    self.assertLess(test_vars[2][1], test_vars[1][1])
+
+  def var_abs_laplacian(self, image):
+    if not image.any():
+      print("Null image")
+      return 0
+    M,N = image.shape
+    depth = cv2.CV_64F
+
+    sobel_x = cv2.Sobel(image, depth, 1, 0)
+    sobel_y = cv2.Sobel(image, depth, 0, 1)
+    average_x = 1/(M*N) * np.sum(np.abs(sobel_x))
+    average_y = 1/(M*N) * np.sum(np.abs(sobel_y))
+    sobel_x_var = np.sum(np.square(sobel_x - average_x))
+    sobel_y_var = np.sum(np.square(sobel_y - average_y))
+
+    return (sobel_x_var, sobel_y_var)
+
 if __name__ == '__main__':
     unittest.main()
